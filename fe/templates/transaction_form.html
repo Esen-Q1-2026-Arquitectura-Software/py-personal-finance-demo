@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+{% block title %}{{ "Edit Transaction" if transaction else "Add Transaction" }}{% endblock %}
+
+{% block content %}
+<h2 class="mb-4">{{ "Edit Transaction" if transaction else "Add Transaction" }}</h2>
+
+<div class="row">
+  <div class="col-md-8">
+    <form method="post"
+          action="{{ url_for('edit_transaction', transaction_id=transaction.id) if transaction else url_for('add_transaction') }}">
+      <div class="row g-3">
+        <div class="col-md-6">
+          <label for="account_id" class="form-label">Account <span class="text-danger">*</span></label>
+          <select class="form-select" id="account_id" name="account_id" required>
+            <option value="">Select account…</option>
+            {% for acc in accounts %}
+              <option value="{{ acc.id }}"
+                {% if transaction and acc.id == transaction.account_id %}selected
+                {% elif not transaction and selected_account == acc.id|string %}selected
+                {% endif %}>
+                {{ acc.name }}
+              </option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="col-md-6">
+          <label for="type" class="form-label">Type <span class="text-danger">*</span></label>
+          <select class="form-select" id="type" name="type" required>
+            <option value="expense"  {% if transaction and transaction.type == 'expense' %}selected{% endif %}>Expense</option>
+            <option value="income"   {% if transaction and transaction.type == 'income' %}selected{% endif %}>Income</option>
+            <option value="transfer" {% if transaction and transaction.type == 'transfer' %}selected{% endif %}>Transfer</option>
+          </select>
+        </div>
+        <div class="col-md-6">
+          <label for="amount" class="form-label">Amount ($) <span class="text-danger">*</span></label>
+          <input type="number" class="form-control" id="amount" name="amount"
+                 step="0.01" min="0.01"
+                 value="{{ '%.2f'|format(transaction.amount|float) if transaction else '' }}"
+                 required />
+        </div>
+        <div class="col-md-6">
+          <label for="date" class="form-label">Date <span class="text-danger">*</span></label>
+          <input type="datetime-local" class="form-control" id="date" name="date"
+                 value="{{ transaction.date[:16] if transaction else '' }}"
+                 required />
+        </div>
+        <div class="col-md-6">
+          <label for="category_id" class="form-label">Category</label>
+          <select class="form-select" id="category_id" name="category_id">
+            <option value="">— None —</option>
+            {% for cat in categories %}
+              <option value="{{ cat.id }}"
+                {% if transaction and transaction.category and transaction.category.id == cat.id %}selected{% endif %}>
+                {{ cat.name }} ({{ cat.type }})
+              </option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="col-md-6">
+          <label for="description" class="form-label">Description</label>
+          <input type="text" class="form-control" id="description" name="description"
+                 value="{{ transaction.description or '' if transaction else '' }}"
+                 placeholder="Optional note" />
+        </div>
+      </div>
+
+      <div class="d-flex gap-2 mt-4">
+        <button type="submit" class="btn btn-primary">
+          {{ "Save Changes" if transaction else "Save Transaction" }}
+        </button>
+        <a href="{{ url_for('transactions') }}" class="btn btn-secondary">Cancel</a>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}

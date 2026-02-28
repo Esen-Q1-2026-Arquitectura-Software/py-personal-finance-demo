@@ -46,6 +46,19 @@ def api_post(path: str, data: dict) -> dict | None:
         return None
 
 
+def api_put(path: str, data: dict) -> dict | None:
+    try:
+        response = httpx.put(f"{BACKEND_URL}{path}", json=data, timeout=_timeout)
+        response.raise_for_status()
+        return response.json()
+    except httpx.HTTPStatusError as exc:
+        app.logger.error("PUT %s returned %s: %s", path, exc.response.status_code, exc)
+        return None
+    except httpx.RequestError as exc:
+        app.logger.error("PUT %s failed: %s", path, exc)
+        return None
+
+
 def api_delete(path: str) -> bool:
     try:
         response = httpx.delete(f"{BACKEND_URL}{path}", timeout=_timeout)
@@ -62,7 +75,7 @@ def api_delete(path: str) -> bool:
 
 
 # ---------------------------------------------------------------------------
-# Routes
+# Dashboard
 # ---------------------------------------------------------------------------
 
 
@@ -70,7 +83,6 @@ def api_delete(path: str) -> bool:
 def dashboard():
     accounts = api_get("/api/accounts/") or []
     recent_transactions = api_get("/api/transactions/", params={"limit": 5}) or []
-    categories = api_get("/api/categories/") or []
 
     total_balance = sum(float(a.get("balance", 0)) for a in accounts)
     total_income = sum(
@@ -84,35 +96,61 @@ def dashboard():
         "index.html",
         accounts=accounts,
         recent_transactions=recent_transactions,
-        categories=categories,
         total_balance=total_balance,
         total_income=total_income,
         total_expense=total_expense,
     )
 
 
-# ---- Accounts -----
+# ---------------------------------------------------------------------------
+# Accounts
+# ---------------------------------------------------------------------------
 
 
 @app.route("/accounts")
 def accounts():
-    accounts = api_get("/api/accounts/") or []
-    return render_template("accounts.html", accounts=accounts)
+    accounts_list = api_get("/api/accounts/") or []
+    return render_template("accounts.html", accounts=accounts_list)
 
 
-@app.route("/accounts/add", methods=["POST"])
+@app.route("/accounts/add", methods=["GET", "POST"])
 def add_account():
-    payload = {
-        "name": request.form.get("name", "").strip(),
-        "type": request.form.get("type", "checking"),
-        "balance": float(request.form.get("balance", 0)),
-    }
-    result = api_post("/api/accounts/", payload)
-    if result:
-        flash(f"Account '{result['name']}' created successfully.", "success")
-    else:
-        flash("Failed to create account. Please try again.", "danger")
-    return redirect(url_for("accounts"))
+    if request.method == "POST":
+        payload = {
+            "name": request.form.get("name", "").strip(),
+            "type": request.form.get("type", "checking"),
+            "balance": float(request.form.get("balance", 0)),
+        }
+        result = api_post("/api/accounts/", payload)
+        if result:
+            flash(f"Account '{result['name']}' created.", "success")
+        else:
+            flash("Failed to create account.", "danger")
+        return redirect(url_for("accounts"))
+
+    return render_template("account_form.html", account=None)
+
+
+@app.route("/accounts/edit/<int:account_id>", methods=["GET", "POST"])
+def edit_account(account_id: int):
+    if request.method == "POST":
+        payload = {
+            "name": request.form.get("name", "").strip(),
+            "type": request.form.get("type"),
+            "balance": float(request.form.get("balance", 0)),
+        }
+        result = api_put(f"/api/accounts/{account_id}", payload)
+        if result:
+            flash(f"Account '{result['name']}' updated.", "success")
+        else:
+            flash("Failed to update account.", "danger")
+        return redirect(url_for("accounts"))
+
+    account = api_get(f"/api/accounts/{account_id}")
+    if not account:
+        flash("Account not found.", "danger")
+        return redirect(url_for("accounts"))
+    return render_template("account_form.html", account=account)
 
 
 @app.route("/accounts/delete/<int:account_id>", methods=["POST"])
@@ -125,7 +163,9 @@ def delete_account(account_id: int):
     return redirect(url_for("accounts"))
 
 
-# ---- Categories ----
+# ---------------------------------------------------------------------------
+# Categories
+# ---------------------------------------------------------------------------
 
 
 @app.route("/categories")
@@ -142,7 +182,7 @@ def add_category():
     }
     result = api_post("/api/categories/", payload)
     if result:
-        flash(f"Category '{result['name']}' created successfully.", "success")
+        flash(f"Category '{result['name']}' created.", "success")
     else:
         flash("Failed to create category. It may already exist.", "danger")
     return redirect(url_for("categories"))
@@ -158,7 +198,9 @@ def delete_category(category_id: int):
     return redirect(url_for("categories"))
 
 
-# ---- Transactions ----
+# ---------------------------------------------------------------------------
+# Transactions
+# ---------------------------------------------------------------------------
 
 
 @app.route("/transactions")
@@ -169,42 +211,93 @@ def transactions():
         params["account_id"] = account_id
 
     txns = api_get("/api/transactions/", params=params) or []
-    accounts = api_get("/api/accounts/") or []
-    cats = api_get("/api/categories/") or []
+    accounts_list = api_get("/api/accounts/") or []
 
     return render_template(
         "transactions.html",
         transactions=txns,
-        accounts=accounts,
-        categories=cats,
+        accounts=accounts_list,
         selected_account=account_id,
     )
 
 
-@app.route("/transactions/add", methods=["POST"])
+@app.route("/transactions/add", methods=["GET", "POST"])
 def add_transaction():
-    date_str = request.form.get("date") or datetime.utcnow().isoformat()
-    try:
-        # Accept 'YYYY-MM-DDTHH:MM' from datetime-local input
-        date_iso = datetime.fromisoformat(date_str).isoformat()
-    except ValueError:
-        date_iso = datetime.utcnow().isoformat()
+    if request.method == "POST":
+        date_str = request.form.get("date") or datetime.utcnow().isoformat()
+        try:
+            date_iso = datetime.fromisoformat(date_str).isoformat()
+        except ValueError:
+            date_iso = datetime.utcnow().isoformat()
 
-    category_id = request.form.get("category_id") or None
-    payload = {
-        "account_id": int(request.form.get("account_id")),
-        "category_id": int(category_id) if category_id else None,
-        "amount": float(request.form.get("amount", 0)),
-        "description": request.form.get("description", "").strip() or None,
-        "type": request.form.get("type", "expense"),
-        "date": date_iso,
-    }
-    result = api_post("/api/transactions/", payload)
-    if result:
-        flash("Transaction added successfully.", "success")
-    else:
-        flash("Failed to add transaction.", "danger")
-    return redirect(url_for("transactions"))
+        category_id = request.form.get("category_id") or None
+        payload = {
+            "account_id": int(request.form.get("account_id")),
+            "category_id": int(category_id) if category_id else None,
+            "amount": float(request.form.get("amount", 0)),
+            "description": request.form.get("description", "").strip() or None,
+            "type": request.form.get("type", "expense"),
+            "date": date_iso,
+        }
+        result = api_post("/api/transactions/", payload)
+        if result:
+            flash("Transaction added.", "success")
+        else:
+            flash("Failed to add transaction.", "danger")
+        return redirect(url_for("transactions"))
+
+    # GET — show empty form
+    accounts_list = api_get("/api/accounts/") or []
+    cats = api_get("/api/categories/") or []
+    preselected = request.args.get("account_id")
+    return render_template(
+        "transaction_form.html",
+        transaction=None,
+        accounts=accounts_list,
+        categories=cats,
+        selected_account=preselected,
+    )
+
+
+@app.route("/transactions/edit/<int:transaction_id>", methods=["GET", "POST"])
+def edit_transaction(transaction_id: int):
+    if request.method == "POST":
+        date_str = request.form.get("date") or datetime.utcnow().isoformat()
+        try:
+            date_iso = datetime.fromisoformat(date_str).isoformat()
+        except ValueError:
+            date_iso = datetime.utcnow().isoformat()
+
+        category_id = request.form.get("category_id") or None
+        payload = {
+            "account_id": int(request.form.get("account_id")),
+            "category_id": int(category_id) if category_id else None,
+            "amount": float(request.form.get("amount", 0)),
+            "description": request.form.get("description", "").strip() or None,
+            "type": request.form.get("type", "expense"),
+            "date": date_iso,
+        }
+        result = api_put(f"/api/transactions/{transaction_id}", payload)
+        if result:
+            flash("Transaction updated.", "success")
+        else:
+            flash("Failed to update transaction.", "danger")
+        return redirect(url_for("transactions"))
+
+    # GET — load existing transaction into form
+    txn = api_get(f"/api/transactions/{transaction_id}")
+    if not txn:
+        flash("Transaction not found.", "danger")
+        return redirect(url_for("transactions"))
+    accounts_list = api_get("/api/accounts/") or []
+    cats = api_get("/api/categories/") or []
+    return render_template(
+        "transaction_form.html",
+        transaction=txn,
+        accounts=accounts_list,
+        categories=cats,
+        selected_account=None,
+    )
 
 
 @app.route("/transactions/delete/<int:transaction_id>", methods=["POST"])
