@@ -1,0 +1,86 @@
+# Docker Compose v3.9 – Personal Finance Demo
+# Docs: https://docs.docker.com/compose/compose-file/
+#
+# Services
+#   mysql    – MySQL 8.0 database
+#   backend  – FastAPI (uvicorn) on port 8000
+#   frontend – Flask on port 5000
+#
+# Usage:
+#   docker compose up --build       # first run
+#   docker compose up -d            # detached
+#   docker compose down -v          # stop and remove volumes
+
+services:
+
+  # ---------------------------------------------------------------------------
+  # MySQL 8.0
+  # Image reference: https://hub.docker.com/_/mysql
+  # ---------------------------------------------------------------------------
+  mysql:
+    image: mysql:8.0
+    container_name: finance_mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: rootpassword
+      MYSQL_DATABASE: finance
+      MYSQL_USER: financeuser
+      MYSQL_PASSWORD: financepass
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+    # healthcheck lets dependent services wait until MySQL is actually ready
+    # mysqladmin ping docs: https://dev.mysql.com/doc/refman/8.0/en/mysqladmin.html
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-prootpassword"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+  # ---------------------------------------------------------------------------
+  # FastAPI backend
+  # ---------------------------------------------------------------------------
+  backend:
+    build:
+      context: ./be
+      dockerfile: Dockerfile
+    container_name: finance_backend
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: mysql+pymysql://financeuser:financepass@mysql:3306/finance
+    ports:
+      - "8000:8000"
+    depends_on:
+      mysql:
+        condition: service_healthy
+    # Mount source for hot-reload during development; remove for production
+    volumes:
+      - ./be:/app
+
+  # ---------------------------------------------------------------------------
+  # Flask frontend
+  # ---------------------------------------------------------------------------
+  frontend:
+    build:
+      context: ./fe
+      dockerfile: Dockerfile
+    container_name: finance_frontend
+    restart: unless-stopped
+    environment:
+      BACKEND_URL: http://backend:8000
+      SECRET_KEY: change-this-in-production
+    ports:
+      - "5000:5000"
+    depends_on:
+      - backend
+    volumes:
+      - ./fe:/app
+
+# ---------------------------------------------------------------------------
+# Named volumes
+# ---------------------------------------------------------------------------
+volumes:
+  mysql_data:
+    driver: local
