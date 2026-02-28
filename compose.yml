@@ -70,6 +70,7 @@ services:
     restart: unless-stopped
     environment:
       BACKEND_URL: http://backend:8000
+      WS_URL: ws://localhost:8000/ws
       SECRET_KEY: change-this-in-production
     ports:
       - "5000:5000"

@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 from ..database import get_db
 from ..models import Category
 from ..schemas import CategoryCreate, CategoryRead, CategoryUpdate
+from ..websocket import manager
 
 router = APIRouter(prefix="/api/categories", tags=["categories"])
 
@@ -35,6 +36,13 @@ def create_category(payload: CategoryCreate, db: Session = Depends(get_db)):
     db.add(category)
     db.commit()
     db.refresh(category)
+    manager.notify(
+        {
+            "event": "category_created",
+            "message": f"Category '{category.name}' created.",
+            "alert": "success",
+        }
+    )
     return category
 
 
@@ -61,5 +69,13 @@ def delete_category(category_id: int, db: Session = Depends(get_db)):
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Category not found"
         )
+    name = category.name
     db.delete(category)
     db.commit()
+    manager.notify(
+        {
+            "event": "category_deleted",
+            "message": f"Category '{name}' deleted.",
+            "alert": "warning",
+        }
+    )

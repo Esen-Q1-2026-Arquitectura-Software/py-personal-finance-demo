@@ -8,6 +8,7 @@ app = Flask(__name__)
 app.secret_key = os.getenv("SECRET_KEY", "dev-secret-key-change-in-production")
 
 BACKEND_URL = os.getenv("BACKEND_URL", "http://localhost:8000")
+WS_URL = os.getenv("WS_URL", "ws://localhost:8000/ws")
 
 # httpx timeout configuration
 # Docs: https://www.python-httpx.org/advanced/timeouts/
@@ -75,6 +76,16 @@ def api_delete(path: str) -> bool:
 
 
 # ---------------------------------------------------------------------------
+# Template context — make WS_URL available to all templates
+# ---------------------------------------------------------------------------
+
+
+@app.context_processor
+def inject_ws_url():
+    return dict(ws_url=WS_URL)
+
+
+# ---------------------------------------------------------------------------
 # Dashboard
 # ---------------------------------------------------------------------------
 
@@ -99,6 +110,29 @@ def dashboard():
         total_balance=total_balance,
         total_income=total_income,
         total_expense=total_expense,
+    )
+
+
+@app.route("/api/dashboard-data")
+def dashboard_data():
+    """JSON endpoint used by the WebSocket JS to refresh dashboard numbers."""
+    from flask import jsonify
+
+    accounts = api_get("/api/accounts/") or []
+    recent_txns = api_get("/api/transactions/", params={"limit": 5}) or []
+    total_balance = sum(float(a.get("balance", 0)) for a in accounts)
+    total_income = sum(
+        float(t["amount"]) for t in recent_txns if t.get("type") == "income"
+    )
+    total_expense = sum(
+        float(t["amount"]) for t in recent_txns if t.get("type") == "expense"
+    )
+    return jsonify(
+        total_balance=f"{total_balance:.2f}",
+        total_income=f"{total_income:.2f}",
+        total_expense=f"{total_expense:.2f}",
+        accounts=accounts,
+        recent_transactions=recent_txns,
     )
 
 

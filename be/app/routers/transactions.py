@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session, joinedload
 from ..database import get_db
 from ..models import Account, Transaction
 from ..schemas import TransactionCreate, TransactionRead, TransactionUpdate
+from ..websocket import manager
 
 router = APIRouter(prefix="/api/transactions", tags=["transactions"])
 
@@ -61,6 +62,13 @@ def create_transaction(payload: TransactionCreate, db: Session = Depends(get_db)
 
     db.commit()
     db.refresh(txn)
+    manager.notify(
+        {
+            "event": "transaction_created",
+            "message": f"New {payload.type} of ${float(payload.amount):.2f} added.",
+            "alert": "success",
+        }
+    )
     return _get_or_404(txn.id, db)
 
 
@@ -73,6 +81,13 @@ def update_transaction(
         setattr(txn, field, value)
     db.commit()
     db.refresh(txn)
+    manager.notify(
+        {
+            "event": "transaction_updated",
+            "message": f"Transaction #{transaction_id} updated.",
+            "alert": "info",
+        }
+    )
     return _get_or_404(transaction_id, db)
 
 
@@ -81,3 +96,10 @@ def delete_transaction(transaction_id: int, db: Session = Depends(get_db)):
     txn = _get_or_404(transaction_id, db)
     db.delete(txn)
     db.commit()
+    manager.notify(
+        {
+            "event": "transaction_deleted",
+            "message": "Transaction deleted.",
+            "alert": "warning",
+        }
+    )

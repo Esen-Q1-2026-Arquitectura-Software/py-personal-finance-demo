@@ -1,16 +1,19 @@
+import asyncio
 import logging
 import time
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, WebSocket
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
 from sqlalchemy.exc import OperationalError
+from starlette.websockets import WebSocketDisconnect
 
 from .database import Base, SessionLocal, engine
 from .models import Category  # noqa: F401 – needed so Base knows about models
 from .models import Account, Transaction  # noqa: F401
 from .routers import accounts, categories, transactions
+from .websocket import manager
 
 logger = logging.getLogger(__name__)
 
@@ -82,6 +85,9 @@ async def lifespan(app: FastAPI):
     finally:
         db.close()
 
+    # Bind the asyncio event loop so sync routers can schedule WS broadcasts
+    manager.set_event_loop(asyncio.get_running_loop())
+
     yield  # application is running
 
 
@@ -113,3 +119,19 @@ app.include_router(transactions.router)
 @app.get("/health", tags=["health"])
 def health_check():
     return {"status": "ok"}
+
+
+# ---------------------------------------------------------------------------
+# WebSocket endpoint
+# ---------------------------------------------------------------------------
+
+
+@app.websocket("/ws")
+async def websocket_endpoint(websocket: WebSocket):
+    await manager.connect(websocket)
+    try:
+        while True:
+            # Keep the connection open; ignore any client messages
+            await websocket.receive_text()
+    except WebSocketDisconnect:
+        manager.disconnect(websocket)

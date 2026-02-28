@@ -14,7 +14,11 @@
         href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" />
   <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}" />
 </head>
-<body>
+<body data-ws-url="{{ ws_url }}">
+
+<!-- Toast notifications (positioned top-right) -->
+<div id="toast-container"
+     style="position:fixed;top:80px;right:20px;z-index:9999;max-width:350px;"></div>
 
 <!-- Navbar -->
 <nav class="navbar navbar-expand-lg navbar-dark bg-primary">
@@ -63,5 +67,6 @@
   <small>Personal Finance Demo &mdash; Flask + FastAPI + MySQL</small>
 </footer>
 
+<script src="{{ url_for('static', filename='js/ws.js') }}"></script>
 </body>
 </html>

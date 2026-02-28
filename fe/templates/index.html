@@ -12,7 +12,7 @@
         <i class="bi bi-wallet2 fs-1"></i>
         <div>
           <div class="card-title h6 mb-0 opacity-75">Total Balance</div>
-          <div class="fs-4 fw-bold">${{ "%.2f"|format(total_balance) }}</div>
+          <div id="dashboard-balance" class="fs-4 fw-bold">${{ "%.2f"|format(total_balance) }}</div>
         </div>
       </div>
     </div>
@@ -23,7 +23,7 @@
         <i class="bi bi-graph-up-arrow fs-1"></i>
         <div>
           <div class="card-title h6 mb-0 opacity-75">Recent Income</div>
-          <div class="fs-4 fw-bold">${{ "%.2f"|format(total_income) }}</div>
+          <div id="dashboard-income" class="fs-4 fw-bold">${{ "%.2f"|format(total_income) }}</div>
         </div>
       </div>
     </div>
@@ -34,7 +34,7 @@
         <i class="bi bi-graph-down-arrow fs-1"></i>
         <div>
           <div class="card-title h6 mb-0 opacity-75">Recent Expenses</div>
-          <div class="fs-4 fw-bold">${{ "%.2f"|format(total_expense) }}</div>
+          <div id="dashboard-expense" class="fs-4 fw-bold">${{ "%.2f"|format(total_expense) }}</div>
         </div>
       </div>
     </div>
@@ -49,7 +49,7 @@
         <span><i class="bi bi-bank me-1"></i>Accounts ({{ accounts|length }})</span>
         <a href="{{ url_for('accounts') }}" class="btn btn-sm btn-outline-primary">View all</a>
       </div>
-      <ul class="list-group list-group-flush">
+      <ul id="dashboard-accounts" class="list-group list-group-flush">
         {% if accounts %}
           {% for acc in accounts %}
             <li class="list-group-item d-flex justify-content-between">
@@ -86,7 +86,7 @@
                 <th class="text-end">Amount</th>
               </tr>
             </thead>
-            <tbody>
+            <tbody id="dashboard-txn-body">
               {% for txn in recent_transactions %}
                 <tr>
                   <td>{{ txn.date[:10] }}</td>

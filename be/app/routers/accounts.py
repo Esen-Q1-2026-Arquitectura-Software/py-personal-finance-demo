@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 from ..database import get_db
 from ..models import Account
 from ..schemas import AccountCreate, AccountRead, AccountUpdate
+from ..websocket import manager
 
 router = APIRouter(prefix="/api/accounts", tags=["accounts"])
 
@@ -29,6 +30,13 @@ def create_account(payload: AccountCreate, db: Session = Depends(get_db)):
     db.add(account)
     db.commit()
     db.refresh(account)
+    manager.notify(
+        {
+            "event": "account_created",
+            "message": f"Account '{account.name}' created.",
+            "alert": "success",
+        }
+    )
     return account
 
 
@@ -45,6 +53,13 @@ def update_account(
         setattr(account, field, value)
     db.commit()
     db.refresh(account)
+    manager.notify(
+        {
+            "event": "account_updated",
+            "message": f"Account '{account.name}' updated.",
+            "alert": "info",
+        }
+    )
     return account
 
 
@@ -55,5 +70,13 @@ def delete_account(account_id: int, db: Session = Depends(get_db)):
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Account not found"
         )
+    name = account.name
     db.delete(account)
     db.commit()
+    manager.notify(
+        {
+            "event": "account_deleted",
+            "message": f"Account '{name}' deleted.",
+            "alert": "warning",
+        }
+    )
