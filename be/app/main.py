@@ -1,12 +1,18 @@
+import logging
+import time
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy import text
+from sqlalchemy.exc import OperationalError
 
 from .database import Base, SessionLocal, engine
 from .models import Category  # noqa: F401 – needed so Base knows about models
 from .models import Account, Transaction  # noqa: F401
 from .routers import accounts, categories, transactions
+
+logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # Seed default categories if the table is empty
@@ -43,8 +49,30 @@ def _seed_categories(db):
 # ---------------------------------------------------------------------------
 
 
+def _wait_for_db(retries: int = 30, delay: float = 2.0) -> None:
+    """Block until the database is reachable, retrying on failure."""
+    for attempt in range(1, retries + 1):
+        try:
+            with engine.connect() as conn:
+                conn.execute(text("SELECT 1"))
+            logger.info("Database is ready (attempt %d).", attempt)
+            return
+        except OperationalError as exc:
+            logger.warning(
+                "Database not ready (attempt %d/%d): %s", attempt, retries, exc
+            )
+            if attempt == retries:
+                raise RuntimeError(
+                    f"Could not connect to the database after {retries} attempts."
+                ) from exc
+            time.sleep(delay)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # Wait until MySQL accepts connections before touching the schema
+    _wait_for_db()
+
     # Create all tables (idempotent – does nothing if they already exist)
     Base.metadata.create_all(bind=engine)
 

@@ -1,13 +1,17 @@
 import os
 from datetime import datetime
 
-import requests
+import httpx
 from flask import Flask, flash, redirect, render_template, request, url_for
 
 app = Flask(__name__)
 app.secret_key = os.getenv("SECRET_KEY", "dev-secret-key-change-in-production")
 
 BACKEND_URL = os.getenv("BACKEND_URL", "http://localhost:8000")
+
+# httpx timeout configuration
+# Docs: https://www.python-httpx.org/advanced/timeouts/
+_timeout = httpx.Timeout(10.0, connect=5.0)
 
 
 # ---------------------------------------------------------------------------
@@ -18,30 +22,41 @@ BACKEND_URL = os.getenv("BACKEND_URL", "http://localhost:8000")
 def api_get(path: str, params: dict | None = None) -> list | dict | None:
     """Call the FastAPI backend and return parsed JSON, or None on error."""
     try:
-        response = requests.get(f"{BACKEND_URL}{path}", params=params, timeout=5)
+        response = httpx.get(f"{BACKEND_URL}{path}", params=params, timeout=_timeout)
         response.raise_for_status()
         return response.json()
-    except requests.RequestException as exc:
+    except httpx.HTTPStatusError as exc:
+        app.logger.error("GET %s returned %s: %s", path, exc.response.status_code, exc)
+        return None
+    except httpx.RequestError as exc:
         app.logger.error("GET %s failed: %s", path, exc)
         return None
 
 
 def api_post(path: str, data: dict) -> dict | None:
     try:
-        response = requests.post(f"{BACKEND_URL}{path}", json=data, timeout=5)
+        response = httpx.post(f"{BACKEND_URL}{path}", json=data, timeout=_timeout)
         response.raise_for_status()
         return response.json()
-    except requests.RequestException as exc:
+    except httpx.HTTPStatusError as exc:
+        app.logger.error("POST %s returned %s: %s", path, exc.response.status_code, exc)
+        return None
+    except httpx.RequestError as exc:
         app.logger.error("POST %s failed: %s", path, exc)
         return None
 
 
 def api_delete(path: str) -> bool:
     try:
-        response = requests.delete(f"{BACKEND_URL}{path}", timeout=5)
+        response = httpx.delete(f"{BACKEND_URL}{path}", timeout=_timeout)
         response.raise_for_status()
         return True
-    except requests.RequestException as exc:
+    except httpx.HTTPStatusError as exc:
+        app.logger.error(
+            "DELETE %s returned %s: %s", path, exc.response.status_code, exc
+        )
+        return False
+    except httpx.RequestError as exc:
         app.logger.error("DELETE %s failed: %s", path, exc)
         return False
 
